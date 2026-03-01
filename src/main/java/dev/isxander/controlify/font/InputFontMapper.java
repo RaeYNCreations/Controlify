@@ -8,11 +8,13 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import dev.isxander.controlify.api.bind.InputBinding;
+import dev.isxander.controlify.bindings.input.ComboInput;
 import dev.isxander.controlify.bindings.input.Input;
 import dev.isxander.controlify.controller.id.ControllerType;
 import dev.isxander.controlify.platform.client.resource.SimpleControlifyReloadListener;
 import dev.isxander.controlify.utils.CUtil;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
@@ -97,13 +99,32 @@ public class InputFontMapper implements SimpleControlifyReloadListener<InputFont
             return Component.literal("?");
         }
 
-        List<Identifier> relevantInputs = binding.boundInput().getRelevantInputs();
-        return getComponentFromInputs(namespace, relevantInputs);
+        return getComponentFromBind(namespace, binding.boundInput());
     }
 
     public Component getComponentFromBind(Identifier namespace, Input input) {
+        if (input instanceof ComboInput combo) {
+            return getComponentFromComboInput(namespace, combo);
+        }
         List<Identifier> relevantInputs = input.getRelevantInputs();
         return getComponentFromInputs(namespace, relevantInputs);
+    }
+
+    public Component getComponentFromComboInput(Identifier namespace, ComboInput comboInput) {
+        if (comboInput.inputs().isEmpty()) {
+            return Component.literal("<unbound>");
+        }
+
+        MutableComponent result = null;
+        for (Input subInput : comboInput.inputs()) {
+            Component subComponent = getComponentFromInputs(namespace, subInput.getRelevantInputs());
+            if (result == null) {
+                result = subComponent.copy();
+            } else {
+                result.append(Component.literal(" + ")).append(subComponent);
+            }
+        }
+        return result != null ? result : Component.literal("<unbound>");
     }
 
     public Component getComponentFromInputs(Identifier namespace, List<Identifier> inputs) {
@@ -113,15 +134,20 @@ public class InputFontMapper implements SimpleControlifyReloadListener<InputFont
 
         FontMap fontMap = getMappings(namespace);
 
-        String literal = inputs.stream()
-                .map(input -> String.valueOf(getChar(fontMap, input)))
-                .collect(Collectors.joining("+"));
-
-        return Component.literal(literal).withStyle(style -> style
-                .withFont(CUtil.createResourceFont(fontMap.namespace().withPrefix("controller/")))
-                //? if >=1.21.4
-                .withShadowColor(0x00000000) // remove shadow
-                .withColor(0xFFFFFFFF)); // override color of font renderer so the glyph always renders properly
+        MutableComponent result = null;
+        for (Identifier input : inputs) {
+            Component glyph = Component.literal(String.valueOf(getChar(fontMap, input))).withStyle(style -> style
+                    .withFont(CUtil.createResourceFont(fontMap.namespace().withPrefix("controller/")))
+                    //? if >=1.21.4
+                    .withShadowColor(0x00000000)
+                    .withColor(0xFFFFFFFF));
+            if (result == null) {
+                result = glyph.copy();
+            } else {
+                result.append(Component.literal(" + ")).append(glyph);
+            }
+        }
+        return result != null ? result : Component.literal("<unbound>");
     }
 
     private char getChar(FontMap fontMap, Identifier input) {
