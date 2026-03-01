@@ -1,5 +1,6 @@
 package dev.isxander.controlify.gui.screen;
 
+import dev.isxander.controlify.bindings.input.ComboInput;
 import dev.isxander.controlify.bindings.input.Input;
 import dev.isxander.controlify.controller.ControllerEntity;
 import dev.isxander.controlify.gui.controllers.BindController;
@@ -12,6 +13,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class BindConsumerScreen extends Screen implements ScreenProcessorProvider {
@@ -23,6 +26,8 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
 
     private int ticksTillClose;
     private int ticksTillInput;
+    private final List<Input> collectedInputs = new ArrayList<>();
+    private int ticksSinceLastInput = 0;
 
     public BindConsumerScreen(BindConsumer bindConsumer, Option<Input> option, BindController.BindControllerElement widgetToFocus, Screen backgroundScreen) {
         super(Component.empty());
@@ -91,8 +96,16 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
 
         Optional<Input> pressedBind = bindConsumer.getPressedBind();
         if (pressedBind.isPresent()) {
-            option.requestSet(pressedBind.get());
-            returnToBackground();
+            Input newInput = pressedBind.get();
+            if (collectedInputs.stream().noneMatch(newInput::equals)) {
+                collectedInputs.add(newInput);
+            }
+            ticksSinceLastInput = 0;
+        } else if (!collectedInputs.isEmpty()) {
+            ticksSinceLastInput++;
+            if (ticksSinceLastInput > TICKS_BEFORE_FINALIZE) {
+                finalizeAndReturn();
+            }
         }
     }
 
@@ -107,7 +120,11 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
         if (consumed) return true;
 
         if (ticksTillInput > 0) return false;
-        returnToBackground();
+        if (!collectedInputs.isEmpty()) {
+            finalizeAndReturn();
+        } else {
+            returnToBackground();
+        }
         return true;
     }
 
@@ -122,7 +139,11 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
         if (consumed) return true;
 
         if (ticksTillInput > 0) return false;
-        returnToBackground();
+        if (!collectedInputs.isEmpty()) {
+            finalizeAndReturn();
+        } else {
+            returnToBackground();
+        }
         return true;
     }
 
@@ -137,7 +158,11 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
         if (consumed) return true;
 
         if (ticksTillInput > 0) return false;
-        returnToBackground();
+        if (!collectedInputs.isEmpty()) {
+            finalizeAndReturn();
+        } else {
+            returnToBackground();
+        }
         return true;
     }
 
@@ -147,8 +172,23 @@ public class BindConsumerScreen extends Screen implements ScreenProcessorProvide
         if (consumed) return true;
 
         if (ticksTillInput > 0) return false;
-        returnToBackground();
+        if (!collectedInputs.isEmpty()) {
+            finalizeAndReturn();
+        } else {
+            returnToBackground();
+        }
         return true;
+    }
+
+    private static final int TICKS_BEFORE_FINALIZE = 10;
+
+    private void finalizeAndReturn() {
+        if (collectedInputs.size() == 1) {
+            option.requestSet(collectedInputs.get(0));
+        } else {
+            option.requestSet(new ComboInput(List.copyOf(collectedInputs)));
+        }
+        returnToBackground();
     }
 
     private void returnToBackground() {
